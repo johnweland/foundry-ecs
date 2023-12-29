@@ -9,7 +9,6 @@ import * as ecs_patterns from "aws-cdk-lib/aws-ecs-patterns";
 export class FoundryEcsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ICoreStackProps) {
     super(scope, id, props);
-
     cdk.Tags.of(this).add('project', props.project);
     cdk.Tags.of(this).add('stage', props.stage);
 

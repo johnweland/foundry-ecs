@@ -3,9 +3,6 @@ import { StackProps } from "aws-cdk-lib";
 interface ICoreStackProps extends StackProps {
   project: string;
   stage: string;
-  tags?: {
-    [key: string]: string;
-  }
 }
 
 
