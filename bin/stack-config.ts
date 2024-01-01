@@ -8,7 +8,7 @@ interface ICoreStackProps extends StackProps {
 
 const coreStackProps: ICoreStackProps = {
   project: process.env.PROJECT || "FoundryVtt",
-  stage: process.env.STAGE || "Dev",
+  stage: process.env.STAGE || "dev",
 };
 
 
