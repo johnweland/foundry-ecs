@@ -176,22 +176,22 @@ export class FoundryStack extends Stack {
      * @memberof CloudFront
      * @see https://docs.aws.amazon.com/cdk/api/latest/docs/aws-cdk-lib.CfnOutput.html
      */
-    const distribution = new Distribution(this, 'CloudFront', {
-      comment: `The ${props.stage} Cloud Front Distribution for the ${props.project} service.`,
-      minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
-      defaultBehavior: {
-        cachePolicy: CachePolicy.CACHING_OPTIMIZED,
-        origin: new LoadBalancerV2Origin(albFargateService.loadBalancer, {
-          protocolPolicy: OriginProtocolPolicy.HTTP_ONLY,
-          httpPort: 80
-        })
-      },
-    });
+    // const distribution = new Distribution(this, 'CloudFront', {
+    //   comment: `The ${props.stage} Cloud Front Distribution for the ${props.project} service.`,
+    //   minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
+    //   defaultBehavior: {
+    //     cachePolicy: CachePolicy.CACHING_OPTIMIZED,
+    //     origin: new LoadBalancerV2Origin(albFargateService.loadBalancer, {
+    //       protocolPolicy: OriginProtocolPolicy.HTTP_ONLY,
+    //       httpPort: 80
+    //     })
+    //   },
+    // });
 
-    new CfnOutput(this, 'CloudFrontDomainName', {
-      value: distribution.domainName,
-      description: 'CloudFront Domain Name',
-      exportName: `${props.stage}-${props.project}-cloudfront-domain-name`
-    })
+    // new CfnOutput(this, 'CloudFrontDomainName', {
+    //   value: distribution.domainName,
+    //   description: 'CloudFront Domain Name',
+    //   exportName: `${props.stage}-${props.project}-cloudfront-domain-name`
+    // })
   }
 }
