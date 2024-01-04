@@ -1,17 +1,16 @@
-import { Stack, Tags, App, CfnOutput, Duration } from 'aws-cdk-lib';
+import { Stack, Tags, App, CfnOutput, Duration, Fn } from 'aws-cdk-lib';
 import { CfnGroup } from 'aws-cdk-lib/aws-resourcegroups';
-import { Vpc } from 'aws-cdk-lib/aws-ec2';
+import { SecurityGroup, Vpc } from 'aws-cdk-lib/aws-ec2';
 import { Cluster, FargateTaskDefinition, LogDrivers, ContainerDefinition, ContainerImage, Secret as ecsSecret } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
-import { FileSystem, LifecyclePolicy, PerformanceMode, ThroughputMode } from 'aws-cdk-lib/aws-efs';
-import { PolicyStatement, AnyPrincipal } from 'aws-cdk-lib/aws-iam';
+import { FileSystem } from 'aws-cdk-lib/aws-efs';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Distribution, SecurityPolicyProtocol, CachePolicy, OriginProtocolPolicy } from 'aws-cdk-lib/aws-cloudfront'
 import { LoadBalancerV2Origin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { ICoreStackProps } from '../bin/stack-config';
 
 
-export class FoundryStack extends Stack {
+export class EcsStack extends Stack {
   constructor(scope: App, id: string, props: ICoreStackProps) {
     super(scope, id, props);
     Tags.of(this).add('project', props.project);
@@ -69,31 +68,20 @@ export class FoundryStack extends Stack {
      * @memberof Ec2
      * @see https://docs.aws.amazon.com/cdk/api/latest/docs/aws-ec2-readme.html
      */
-    const vpc = new Vpc(this, 'Vpc', { maxAzs: 2 });
+    const vpc = Vpc.fromVpcAttributes(this, 'VPC', {
+      vpcId: Fn.importValue(`${props.stage}-${props.project}-vpc-id`),
+      availabilityZones: Fn.split(',', Fn.importValue(`${props.stage}-${props.project}-vpc-azs`)),
+      publicSubnetIds: Fn.split(',', Fn.importValue(`${props.stage}-${props.project}-vpc-public-subnets`)),
+    });
 
     /**
      * @memberof Efs
      * @see https://docs.aws.amazon.com/cdk/api/latest/docs/aws-efs-readme.html
      */
-    const fileSystem = new FileSystem(this, 'MyEfsFileSystem', {
-      vpc,
-      encrypted: true,
-      lifecyclePolicy: LifecyclePolicy.AFTER_14_DAYS,
-      performanceMode: PerformanceMode.GENERAL_PURPOSE,
-      throughputMode: ThroughputMode.BURSTING
-    });
-
-    fileSystem.addToResourcePolicy(
-      new PolicyStatement({
-        actions: ['elasticfilesystem:ClientMount'],
-        principals: [new AnyPrincipal()],
-        conditions: {
-          Bool: {
-            'elasticfilesystem:AccessedViaMountTarget': 'true'
-          }
-        }
-      })
-    )
+    const fileSystem = FileSystem.fromFileSystemAttributes(this, 'EfsFileSystem', {
+      fileSystemId: Fn.importValue(`${props.stage}-${props.project}-efs-id`),
+      securityGroup: SecurityGroup.fromSecurityGroupId(this, 'EfsSecurityGroup', Fn.importValue(`${props.stage}-${props.project}-efs-sg`)),
+    })
 
     /**
     * @memberof Ecs
