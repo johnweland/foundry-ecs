@@ -4,11 +4,14 @@ import { Vpc } from 'aws-cdk-lib/aws-ec2';
 import { Cluster, FargateTaskDefinition, LogDrivers, ContainerDefinition, ContainerImage, Secret as ecsSecret } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { FileSystem, LifecyclePolicy, PerformanceMode, ThroughputMode } from 'aws-cdk-lib/aws-efs';
-import { PolicyStatement, AnyPrincipal } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, AnyPrincipal, Policy, Effect } from 'aws-cdk-lib/aws-iam';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
+import * as S3 from 'aws-cdk-lib/aws-s3';
+import * as IAM from 'aws-cdk-lib/aws-iam';
 import { Distribution, SecurityPolicyProtocol, CachePolicy, OriginProtocolPolicy } from 'aws-cdk-lib/aws-cloudfront'
 import { LoadBalancerV2Origin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { ICoreStackProps } from '../bin/stack-config';
+
 
 
 export class FoundryStack extends Stack {
@@ -171,6 +174,25 @@ export class FoundryStack extends Stack {
     fileSystem.grantRootAccess(albFargateService.taskDefinition.taskRole.grantPrincipal);
     fileSystem.connections.allowDefaultPortFrom(albFargateService.service.connections);
 
+    const bucket = new S3.Bucket(this, 'S3Bucket', {
+      bucketName: `${props.stage}-${props.project}-s3-bucket`,
+      blockPublicAccess: S3.BlockPublicAccess.BLOCK_ALL,
+    });
+    bucket.addToResourcePolicy(
+      new PolicyStatement({
+        sid: "PublicReadGetObject",
+        actions: ['s3:*'],
+        principals: [new AnyPrincipal()],
+        resources: [bucket.bucketArn, `${bucket.bucketArn}/*`],
+        effect: Effect.ALLOW,
+      })
+    )
+    bucket.addCorsRule({
+      allowedMethods: [S3.HttpMethods.GET, S3.HttpMethods.PUT, S3.HttpMethods.POST, S3.HttpMethods.DELETE, S3.HttpMethods.HEAD],
+      allowedOrigins: ['*'],
+      allowedHeaders: ['*'],
+      maxAge: 3000,
+    });
 
     /**
      * @memberof CloudFront
