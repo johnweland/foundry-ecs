@@ -1,4 +1,4 @@
-import { Stack, Tags, App, CfnOutput, Duration } from 'aws-cdk-lib';
+import { Stack, Tags, App, CfnOutput, Duration, RemovalPolicy } from 'aws-cdk-lib';
 import { CfnGroup } from 'aws-cdk-lib/aws-resourcegroups';
 import { Vpc } from 'aws-cdk-lib/aws-ec2';
 import { Cluster, FargateTaskDefinition, LogDrivers, ContainerDefinition, ContainerImage, Secret as ecsSecret } from 'aws-cdk-lib/aws-ecs';
@@ -72,20 +72,23 @@ export class FoundryStack extends Stack {
      * @memberof Ec2
      * @see https://docs.aws.amazon.com/cdk/api/latest/docs/aws-ec2-readme.html
      */
-    const vpc = new Vpc(this, 'Vpc', { maxAzs: 2 });
+    const vpc = new Vpc(this, 'Vpc', {
+      maxAzs: 2,
+      natGateways: 1,
+    });
 
     /**
      * @memberof Efs
      * @see https://docs.aws.amazon.com/cdk/api/latest/docs/aws-efs-readme.html
      */
-    const fileSystem = new FileSystem(this, 'MyEfsFileSystem', {
+    const fileSystem = new FileSystem(this, 'EfsFileSystem', {
       vpc,
       encrypted: true,
       lifecyclePolicy: LifecyclePolicy.AFTER_14_DAYS,
       performanceMode: PerformanceMode.GENERAL_PURPOSE,
-      throughputMode: ThroughputMode.BURSTING
+      throughputMode: ThroughputMode.BURSTING,
+      removalPolicy: RemovalPolicy.DESTROY,
     });
-
     fileSystem.addToResourcePolicy(
       new PolicyStatement({
         actions: ['elasticfilesystem:ClientMount'],
@@ -97,6 +100,23 @@ export class FoundryStack extends Stack {
         }
       })
     )
+
+    /**
+     * @memberof S3
+     * @see https://docs.aws.amazon.com/cdk/api/latest/docs/aws-s3-readme.html
+     */
+    const bucketNameToLowerCase = `${props.stage}-${props.project}-s3-bucket`.toLowerCase();
+    const bucket = new S3.Bucket(this, 'S3Bucket', {
+      bucketName: bucketNameToLowerCase,
+      blockPublicAccess: S3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    bucket.addCorsRule({
+      allowedMethods: [S3.HttpMethods.GET, S3.HttpMethods.PUT, S3.HttpMethods.POST, S3.HttpMethods.DELETE, S3.HttpMethods.HEAD],
+      allowedOrigins: ['*'],
+      allowedHeaders: ['*'],
+      maxAge: 3000,
+    });
 
     /**
     * @memberof Ecs
@@ -118,8 +138,15 @@ export class FoundryStack extends Stack {
             fileSystemId: fileSystem.fileSystemId,
           }
         }
-      ]
+      ],
     });
+    taskDefinition.addToExecutionRolePolicy(
+      new PolicyStatement({
+        actions: ['s3:*'],
+        resources: [bucket.bucketArn, `${bucket.bucketArn}/*`],
+        effect: Effect.ALLOW,
+      })
+    )
 
     /**
      * @memberof Ecs
@@ -130,13 +157,15 @@ export class FoundryStack extends Stack {
       image: ContainerImage.fromRegistry("felddy/foundryvtt:release"),
       taskDefinition,
       logging: LogDrivers.awsLogs({ streamPrefix: "foundryvtt" }),
+      environment: {
+        FOUNDRY_AWS_CONFIG: 'true',
+      },
       secrets: {
         FOUNDRY_USERNAME: ecsSecret.fromSecretsManager(secret, "foundry-username"),
         FOUNDRY_PASSWORD: ecsSecret.fromSecretsManager(secret, "foundryvtt-password"),
         FOUNDRY_ADMIN_KEY: ecsSecret.fromSecretsManager(secret, "foundryvtt-admin-key")
-      }
+      },
     });
-
     containerDefinition.addMountPoints(
       {
         sourceVolume: "efs",
@@ -144,7 +173,6 @@ export class FoundryStack extends Stack {
         readOnly: false
       }
     )
-
     containerDefinition.addPortMappings({
       containerPort: 30000
     });
@@ -174,25 +202,7 @@ export class FoundryStack extends Stack {
     fileSystem.grantRootAccess(albFargateService.taskDefinition.taskRole.grantPrincipal);
     fileSystem.connections.allowDefaultPortFrom(albFargateService.service.connections);
 
-    const bucket = new S3.Bucket(this, 'S3Bucket', {
-      bucketName: `${props.stage}-${props.project}-s3-bucket`,
-      blockPublicAccess: S3.BlockPublicAccess.BLOCK_ALL,
-    });
-    bucket.addToResourcePolicy(
-      new PolicyStatement({
-        sid: "PublicReadGetObject",
-        actions: ['s3:*'],
-        principals: [new AnyPrincipal()],
-        resources: [bucket.bucketArn, `${bucket.bucketArn}/*`],
-        effect: Effect.ALLOW,
-      })
-    )
-    bucket.addCorsRule({
-      allowedMethods: [S3.HttpMethods.GET, S3.HttpMethods.PUT, S3.HttpMethods.POST, S3.HttpMethods.DELETE, S3.HttpMethods.HEAD],
-      allowedOrigins: ['*'],
-      allowedHeaders: ['*'],
-      maxAge: 3000,
-    });
+
 
     /**
      * @memberof CloudFront
